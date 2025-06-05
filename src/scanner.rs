@@ -39,7 +39,21 @@ impl Scanner {
             keywords: keywords,
         }
     }
-
+    fn scan_tokens(&mut self) {
+        while !self.cur_is_eof() {
+            self.scan_token();
+            self.consume_char();
+        }
+        self.add_eof();
+    }
+    fn add_eof(&mut self) {
+        self.tokens.push(Token {
+            token_type: TokenType::Eof,
+            lexeme: "".to_string(),
+            literal: Literal::None,
+            line: self.line,
+        });
+    }
     fn scan_token(&mut self) {
         self.start = self.current;
         match self.cur_char() {
@@ -77,8 +91,12 @@ impl Scanner {
                 true => self.add_token(TokenType::LessEqual, Literal::None),
             },
 
-            ' ' => self.consume_char(),
-
+            ' ' => {}
+            '\r' => {}
+            '\t' => {}
+            '\n' => {
+                self.line += 1;
+            }
             '"' => self.add_string(),
 
             // 单字节或双字节符号
@@ -95,7 +113,7 @@ impl Scanner {
             self.consume_char();
         }
 
-        let text = &self.source[self.start..self.current + 1];
+        let text = &self.source[self.start..=self.current];
         match self.keywords.get(text) {
             Some(token_type) => self.add_token(token_type.clone(), Literal::None),
             None => self.add_token(TokenType::Identifier, Literal::String(text.to_string())),
@@ -129,7 +147,7 @@ impl Scanner {
         self.add_token(
             TokenType::Number,
             Literal::Number(
-                self.source[self.start..(self.current + 1)]
+                self.source[self.start..=self.current]
                     .parse::<f64>()
                     .unwrap(),
             ),
@@ -163,7 +181,7 @@ impl Scanner {
         self.tokens.push(Token {
             token_type: token_type,
             literal: literal,
-            lexeme: self.source[self.start..(self.current + 1)].to_string(),
+            lexeme: self.source[self.start..=self.current].to_string(),
             line: self.line,
         });
     }
@@ -364,8 +382,8 @@ mod test_scanners {
         );
 
         let mut scanner = Scanner::new("  123.567  ".to_string());
-        scanner.scan_token();
-        scanner.scan_token();
+        scanner.consume_char();
+        scanner.consume_char();
         scanner.scan_token();
         assert_eq!(
             scanner.tokens[0],
@@ -381,7 +399,7 @@ mod test_scanners {
     #[test]
     fn test_add_string() {
         let mut scanner = Scanner::new("\"hello\"".to_string());
-        scanner.scan_token();
+        scanner.scan_tokens();
         assert_eq!(
             scanner.tokens[0],
             Token {
@@ -393,7 +411,7 @@ mod test_scanners {
         );
 
         let mut scanner = Scanner::new("\"he_llo\"".to_string());
-        scanner.scan_token();
+        scanner.scan_tokens();
         assert_eq!(
             scanner.tokens[0],
             Token {
@@ -405,9 +423,7 @@ mod test_scanners {
         );
 
         let mut scanner = Scanner::new("  \"hello\"".to_string());
-        scanner.scan_token();
-        scanner.scan_token();
-        scanner.scan_token();
+        scanner.scan_tokens();
         assert_eq!(
             scanner.tokens[0],
             Token {
@@ -419,9 +435,7 @@ mod test_scanners {
         );
 
         let mut scanner = Scanner::new("  \"hello\" ".to_string());
-        scanner.scan_token();
-        scanner.scan_token();
-        scanner.scan_token();
+        scanner.scan_tokens();
         assert_eq!(
             scanner.tokens[0],
             Token {
@@ -461,5 +475,73 @@ mod test_scanners {
                 line: 1
             }
         );
-    }    
+    }
+
+    #[test]
+    fn test_scan_tokens() {
+        let mut scanner = Scanner::new("fun hello 123.456 123 \n he_345 ".to_string());
+        scanner.scan_tokens();
+        // fun keyword
+        assert_eq!(
+            scanner.tokens[0],
+            Token {
+                token_type: TokenType::Fun,
+                literal: Literal::None,
+                lexeme: "fun".to_string(),
+                line: 1
+            }
+        );
+
+        // hello identifier
+        assert_eq!(
+            scanner.tokens[1],
+            Token {
+                token_type: TokenType::Identifier,
+                literal: Literal::String("hello".to_string()),
+                lexeme: "hello".to_string(),
+                line: 1
+            }
+        );
+
+        // 123.456 number
+        assert_eq!(
+            scanner.tokens[2],
+            Token {
+                token_type: TokenType::Number,
+                literal: Literal::Number(123.456),
+                lexeme: "123.456".to_string(),
+                line: 1
+            }
+        );
+
+        //123 number
+        assert_eq!(
+            scanner.tokens[3],
+            Token {
+                token_type: TokenType::Number,
+                literal: Literal::Number(123.0),
+                lexeme: "123".to_string(),
+                line: 1
+            }
+        );
+
+         assert_eq!(
+            scanner.tokens[4],
+            Token {
+                token_type: TokenType::Identifier,
+                literal: Literal::String("he_345".to_string()),
+                lexeme: "he_345".to_string(),
+                line: 2
+            }
+        );       
+        assert_eq!(
+            scanner.tokens[5],
+            Token {
+                token_type: TokenType::Eof,
+                literal: Literal::None,
+                lexeme: "".to_string(),
+                line: 2
+            }
+        );
+    }
 }
